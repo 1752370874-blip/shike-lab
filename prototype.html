@@ -61,7 +61,8 @@
   .mk { position: absolute; transform: translateX(-50%); }
   .mk.photo { top: 2px; width: 13px; height: 13px; border: 1.5px solid var(--ink-2); border-radius: 2px; background: var(--card); }
   .mk.note  { top: 33px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
-  .mk.susp  { top: -6px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--wrong); }
+  .mk.susp  { top: -6px; width: 0; height: 0; box-sizing: content-box;
+             border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 8px solid var(--wrong); }
   .mk.susp.miss { border-top-color: var(--miss); }
   .mk.susp.unclear { border-top-color: var(--unclear); }
   .ticks { position: relative; height: 15px; font: 10.5px/1 ui-monospace, Consolas, monospace; color: var(--ink-3); }
@@ -82,12 +83,14 @@
 
   /* 板书 */
   .board {
-    margin: 8px 14px 14px; border-radius: 10px; background: #f4f2ed; border: 1px solid #e8e4dc;
-    padding: 16px 18px 18px; min-height: 168px; position: relative;
+    margin: 8px 14px 0; border-radius: 7px; background: #f7f5f0; border: 1px solid #e4dfd4;
+    box-shadow: inset 0 1px 0 #fff, 0 1px 2px rgba(0,0,0,.03);
+    padding: 18px 20px; min-height: 160px; position: relative;
   }
   .board .chalk { font: 400 15px/1.9 ui-serif, Georgia, "Songti SC", serif; color: #2a2f2b; white-space: pre-wrap; }
   .board .chalk b { font-weight: 600; }
-  .board .stamp { position: absolute; right: 12px; bottom: 10px; font: 10.5px/1 ui-monospace, monospace; color: #a9a49c; }
+  .board-cap { margin: 7px 14px 14px; font: 11px/1.5 -apple-system, "PingFang SC", sans-serif; color: var(--ink-3); }
+  .board-cap::before { content: "▣ "; font-size: 10px; }
 
   /* 转写 */
   .tx { margin: 6px 14px 14px; font-size: 14.5px; line-height: 1.85; color: var(--ink-2); }
@@ -152,7 +155,7 @@
       <div class="clock"><span id="cur">06:40</span> <span class="tot">/ 47:12</span></div>
       <div style="flex:1"></div>
       <div class="clock" style="text-align:right; font-size:12px; color:var(--ink-3); font-weight:400;">
-        疑点 <b style="color:var(--wrong); font-weight:700;">3</b> 待确认 · <span id="pending">3</span>
+        疑点 <b id="pending" style="color:var(--wrong); font-weight:700;">3</b> 待确认
       </div>
     </div>
 
@@ -171,10 +174,8 @@
   <div class="main">
     <section class="panel">
       <div class="panel-hd">此刻的黑板 / PPT</div>
-      <div class="board">
-        <div class="chalk" id="boardText"></div>
-        <div class="stamp" id="boardStamp"></div>
-      </div>
+      <div class="board"><div class="chalk" id="boardText"></div></div>
+      <div class="board-cap" id="boardStamp"></div>
       <div class="panel-hd">你当时记的</div>
       <div class="note-box">
         <div class="ln" id="noteText"></div>
@@ -203,56 +204,70 @@
   // ---- 虚构分段：真实版本由 ASR 时间戳 + 板书 VLM 结果生成 ----
   const segs = [
     {
-      t0: 0, t1: 240,
-      board: '考前回顾：\n卷积定理、拉氏变换、系统稳定性',
-      stamp: '09:14 拍摄',
-      note: '期末会考卷积定理\n拉氏变换 → 时域到 s 域',
+      t0: 0, t1: 420,
+      board: '考前回顾
+
+卷积定理 · 拉普拉斯变换 · 系统稳定性',
+      stamp: '02:14 拍摄 · 板书',
+      note: '期末会考卷积定理
+拉氏变换 → 时域到 s 域',
       tx: '上节课我们讲了卷积定理，今天把拉普拉斯变换补上，这一块期末一定会考。',
     },
     {
-      t0: 240, t1: 400,
-      board: 'h(t) = e^(−2t)·u(t)\n\nH(s) = 1/(s+2)\nROC: Re{s} > −2',
-      stamp: '09:23 拍摄',
-      note: 'h(t)=e^-2t u(t)\nH(s)=1/(s+2)',
+      t0: 420, t1: 900,
+      board: 'h(t) = e^(−2t)·u(t)
+
+H(s) = 1/(s+2)
+ROC: Re{s} > −2',
+      stamp: '12:36 拍摄 · PPT',
+      note: 'h(t) = e^−2t u(t)
+H(s) = 1/(s+2)',
       tx: '所以这个系统的冲激响应是 e 的负二 t 次方乘 u(t)，对应拉氏变换就是 s 加二分之一。注意收敛域是 s 的实部大于负二，不是大于二。',
     },
     {
-      t0: 400, t1: 560,
-      board: '因果系统：ROC 一定在最右极点的右侧\n\n极点 −2 → ROC: Re{s} > −2',
-      stamp: '09:31 拍摄',
+      t0: 900, t1: 1500,
+      board: '因果系统：ROC 一定在最右极点的右侧
+
+极点 −2 → ROC: Re{s} > −2',
+      stamp: '21:05 拍摄 · 板书',
       note: 'Re{s} > 2',
       tx: '这里要强调，因果系统的收敛域一定在最右边极点的右侧。这个结论要记住。',
     },
     {
-      t0: 560, t1: 760,
-      board: '例：求 e^(−3t)u(t) 的拉氏变换\n\n∫₀^∞ e^(−3t)e^(−st)dt = 1/(s+3)',
-      stamp: '09:41 拍摄',
-      note: '∫0∞ e^{-3t}e^{-st}dt = 1/(s+3)\nROC: Re{s} > −3',
+      t0: 1500, t1: 2100,
+      board: '例：求 e^(−3t)u(t) 的拉氏变换
+
+∫₀^∞ e^(−3t)·e^(−st)dt = 1/(s+3)',
+      stamp: '31:40 拍摄 · 板书',
+      note: '∫0∞ e^−3t e^−st dt = 1/(s+3)
+ROC: Re{s} > −3',
       tx: '举个例子，e 的负三 t 次方乘 u(t)，积分出来是 s 加三分之一，收敛域需要注意。',
     },
     {
-      t0: 760, t1: 1200,
-      board: '稳定性与极点的关系\n\n全部极点位于左半平面 ⇔ 稳定',
-      stamp: '09:52 拍摄',
-      note: '极点在左半平面 → 稳定\n（这里没记太清）',
+      t0: 2100, t1: 2832,
+      board: '稳定性与极点的关系
+
+全部极点位于左半平面 ⇔ 稳定',
+      stamp: '38:48 拍摄 · PPT',
+      note: '极点在左半平面 → 稳定
+（这里没记太清）',
       tx: '如果一个系统的所有极点都在左半平面，那么它就是_稳定_的，这个_稳定_性判据要会推。',
-      lowconf: '_稳定_',
     },
   ];
 
   const susps = [
     {
-      id: 's1', type: 'wrong', at: 12 * 60 + 36, segIdx: 2,
+      id: 's1', type: 'wrong', at: 12 * 60 + 36, segIdx: 1,
       title: '你把收敛域记成了大于 2',
       mine: 'Re{s} > 2', truth: 'Re{s} > −2',
-      body: '录音里老师说了两次「大于负二」，板书写的是 Re{s} > −2。符号丢了。',
+      body: '录音里老师说「大于负二」，板书写的是 Re{s} > −2。你笔记里的负号丢了。',
       fixLabel: '改成 Re{s} > −2',
     },
     {
       id: 's2', type: 'miss', at: 21 * 60 + 5, segIdx: 2,
       title: '老师强调的结论你没记',
       mine: '（这段笔记是空的）', truth: '因果系统：ROC 一定在最右极点的右侧',
-      body: '老师在 09:31 板书这行并连说了两遍「要记住」，你的笔记在 20–23 分钟之间没有落笔。',
+      body: '老师在 21:05 板书这行，并连说了两遍「要记住」。你的笔记在 15–25 分钟之间没有落笔。',
       fixLabel: '补进笔记',
     },
     {
@@ -282,7 +297,7 @@
   const pad = n => String(n).padStart(2, '0');
   const mmss = s => `${pad(Math.floor(s / 60))}:${pad(Math.floor(s % 60))}`;
 
-  let t = 400;            // 当前时间（秒）
+  let t = 1100;           // 当前时间（秒）
   let playing = false;
   let raf = null;
   let lastFrame = 0;
