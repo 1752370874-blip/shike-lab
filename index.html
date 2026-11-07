@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>拾课 · 实验台</title>
+<style>
+  body { font: 16px/1.65 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; padding: 28px 20px 60px; background: #faf9f7; color: #1a1a1a; max-width: 720px; -webkit-text-size-adjust: 100%; }
+  h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.015em; }
+  .sub { color: #6f6a64; margin: 0 0 26px; font-size: 15px; }
+  h2 { font-size: 15px; margin: 30px 0 8px; letter-spacing: .02em; }
+  p { margin: 0 0 12px; }
+  a.card { display: block; text-decoration: none; color: inherit; background: #fff; border: 1px solid #e6e2db; border-radius: 14px; padding: 16px 18px; margin: 0 0 10px; }
+  a.card:hover { border-color: #b9b2a8; }
+  a.card .t { font-weight: 650; font-size: 16px; margin-bottom: 3px; }
+  a.card .d { font-size: 13.5px; color: #6f6a64; line-height: 1.5; }
+  .arrow { float: right; color: #a8a29b; }
+  ul { margin: 0 0 12px; padding-left: 20px; font-size: 14.5px; }
+  li { margin-bottom: 6px; }
+  .note { background: #fff; border: 1px solid #e6e2db; border-radius: 12px; padding: 13px 16px; font-size: 13.5px; color: #55504a; margin: 22px 0 0; }
+  code { background: #efede8; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  footer { margin-top: 34px; font-size: 12.5px; color: #9a948d; border-top: 1px solid #e6e2db; padding-top: 14px; }
+</style>
+</head>
+<body>
+<h1>拾课 · 实验台</h1>
+<p class="sub">第二十届全国大学生软件创新大赛 · AI 赋能学习生产力 —— 技术验证页</p>
+
+<a class="card" href="device-test.html">
+  <div class="t">真机采集实验 <span class="arrow">→</span></div>
+  <div class="d">在手机上实测：长录音会不会断流、锁屏切后台会不会丢、内存会不会涨爆、浏览器实际采用的录音参数。结果直接显示在页面上，不需要上传。</div>
+</a>
+
+<h2>这个实验回答什么</h2>
+<ul>
+  <li><b>断流</b>——录音分片 5 秒一片，若某两片间隔超过 6.5 秒，说明被系统节流或挂起</li>
+  <li><b>功耗/内存</b>——45 分钟的课，页面内存会不会涨到被系统杀掉</li>
+  <li><b>忠实度</b>——回声消除、降噪、自动增益是否真被关掉（课堂要环境原声，不要"通话优化"）</li>
+  <li><b>时长</b>——一节课大约 10 MB，能否长期存在本地</li>
+</ul>
+
+<div class="note">
+  <b>怎么测：</b>点「开始录音」→ 录 5 分钟以上 → 中途<b>锁屏 2 分钟</b> → 解锁回来点「停止并出结果」。<br>
+  页面会直接给出「未断流 / 被节流 / 明显断流」的判定，不需要另外回传数据。
+</div>
+
+<footer>
+  静态托管在 GitHub Pages，无后端、无上传、不采集任何数据；录音只留在你手机的浏览器内存里，停止后即丢弃。
+</footer>
+</body>
+</html>
