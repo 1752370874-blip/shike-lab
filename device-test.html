@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#faf9f7">
+<title>拾课 · 真机采集实验</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { font: 16px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 0; padding: 14px 14px 40px; background: #faf9f7; color: #1a1a1a; -webkit-text-size-adjust: 100%; }
+  h1 { font-size: 17px; margin: 0 0 3px; }
+  .hint { font-size: 12.5px; color: #7a7570; margin: 0 0 12px; }
+  .btn { display: block; width: 100%; font: inherit; font-weight: 650; padding: 16px; border: 0; border-radius: 14px; background: #1a1a1a; color: #fff; margin-bottom: 9px; }
+  .btn:disabled { opacity: .38; }
+  .btn.stop { background: #b3261e; }
+  .btn.ghost { background: #fff; color: #1a1a1a; border: 1px solid #d8d3cb; font-weight: 500; }
+  .big { font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; padding: 4px 0; letter-spacing: -.01em; }
+  .verdict { border-radius: 12px; padding: 12px 14px; font-size: 14.5px; font-weight: 600; margin: 10px 0; background: #eceae5; }
+  .verdict.ok { background: #e3f3ea; color: #14603f; }
+  .verdict.bad { background: #fbe6e4; color: #a3221a; }
+  .verdict.warn { background: #fff6e5; color: #6b5620; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 10px; }
+  .cell { background: #fff; border: 1px solid #e6e2db; border-radius: 12px; padding: 9px 11px; }
+  .cell .k { font-size: 11px; color: #8a8580; }
+  .cell .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .cell .v.sm { font-size: 13px; font-weight: 500; line-height: 1.35; word-break: break-word; }
+  .cell.wide { grid-column: span 2; }
+  .meter { height: 7px; background: #eceae5; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+  .meter > i { display: block; height: 100%; width: 0%; background: #2f7d5f; transition: width .08s linear; }
+  .warn { background: #fff6e5; border: 1px solid #f0d9a8; border-radius: 12px; padding: 10px 12px; font-size: 12.5px; color: #6b5620; margin-bottom: 12px; }
+  pre { background: #fff; border: 1px solid #e6e2db; border-radius: 12px; padding: 11px; font: 11px/1.45 ui-monospace, Consolas, monospace; overflow: auto; max-height: 38vh; white-space: pre-wrap; word-break: break-all; }
+  audio { width: 100%; margin: 8px 0; }
+</style>
+</head>
+<body>
+<h1>拾课 · 真机采集实验</h1>
+<p class="hint">回答 3 个问题：长录音会不会断流 · 锁屏/切后台会不会丢 · 内存会不会涨爆。</p>
+
+<div class="warn">
+  <b>建议测法：</b>点「开始录音」→ 录 <b>5 分钟以上</b> → 中途<b>锁屏 2 分钟</b> → 解锁后回来点「停止」。<br>
+  结果直接显示在本页，<b>不需要上传</b>（免费隧道扛不住上传，已改成纯本地测量）。
+</div>
+
+<div class="big" id="clock">00:00</div>
+
+<div class="grid">
+  <div class="cell"><div class="k">状态</div><div class="v sm" id="state">未开始</div></div>
+  <div class="cell"><div class="k">分片数</div><div class="v" id="chunks">0</div></div>
+  <div class="cell"><div class="k">最大分片空档</div><div class="v" id="maxgap">—</div></div>
+  <div class="cell"><div class="k">JS 堆内存</div><div class="v" id="mem">—</div></div>
+  <div class="cell wide"><div class="k">输入电平（确认麦克风在工作）</div><div class="meter"><i id="level"></i></div></div>
+  <div class="cell wide"><div class="k">录音参数（浏览器实际采用）</div><div class="v sm" id="settings">—</div></div>
+  <div class="cell wide"><div class="k">Wake Lock / 可见性</div><div class="v sm" id="wl">—</div></div>
+</div>
+
+<button class="btn" id="start">开始录音</button>
+<button class="btn stop" id="stop" disabled>停止并出结果</button>
+<button class="btn ghost" id="upload" disabled>可选：上传到后端验证重封装</button>
+<audio id="player" controls preload="metadata"></audio>
+
+<div class="verdict" id="verdict" style="display:none"></div>
+<pre id="out">等待开始…</pre>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const S = {
+    rec: null, t0: 0, timer: null, chunks: [], meta: [], gaps: [],
+    wakeLock: null, ctx: null, raf: null, stream: null,
+    memSamples: [], visEvents: [], lastBlob: null, rawName: null,
+  };
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = ms => { const s = Math.floor(ms / 1000); return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
+  const r2 = v => Math.round(v * 100) / 100;
+
+  const dumps = { capability: {}, mic: {}, summary: null, gaps: [], visibility: [], optionalUpload: null };
+  window.__DUMPS__ = dumps;
+  const render = () => { $('out').textContent = JSON.stringify(dumps, null, 2); };
+
+  dumps.capability = {
+    ua: navigator.userAgent,
+    secureContext: isSecureContext,
+    hasWakeLock: 'wakeLock' in navigator,
+    hasPerfMemory: !!(performance && performance.memory),
+    hardwareConcurrency: navigator.hardwareConcurrency,
+    deviceMemory: navigator.deviceMemory,
+    screen: `${screen.width}x${screen.height} dpr=${devicePixelRatio}`,
+  };
+  render();
+
+  const memMB = () => performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576 * 10) / 10 : null;
+  const setState = s => { $('state').textContent = s; };
+
+  document.addEventListener('visibilitychange', () => {
+    const rec = { tSec: r2((Date.now() - S.t0) / 1000), state: document.visibilityState };
+    S.visEvents.push(rec);
+    dumps.visibility = S.visEvents;
+  });
+
+  async function start() {
+    $('start').disabled = true;
+    setState('申请麦克风…');
+    try {
+      // 关回声消除/降噪/自动增益：课堂要保真，不要"通话优化"
+      S.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        video: false,
+      });
+    } catch (e) {
+      setState('麦克风失败: ' + e.name);
+      dumps.mic = { error: e.name + ': ' + e.message };
+      render(); $('start').disabled = false; return;
+    }
+
+    const track = S.stream.getAudioTracks()[0];
+    const st = track.getSettings ? track.getSettings() : {};
+    dumps.mic = {
+      label: track.label, sampleRate: st.sampleRate, channelCount: st.channelCount,
+      echoCancellation: st.echoCancellation, noiseSuppression: st.noiseSuppression,
+      autoGainControl: st.autoGainControl, latency: st.latency,
+    };
+    $('settings').textContent = `${st.sampleRate || '?'}Hz/${st.channelCount || '?'}ch · 回声消除=${st.echoCancellation} · 降噪=${st.noiseSuppression} · 增益=${st.autoGainControl}`;
+
+    // 电平表
+    const AC = window.AudioContext || window.webkitAudioContext;
+    S.ctx = new AC();
+    const src = S.ctx.createMediaStreamSource(S.stream);
+    const an = S.ctx.createAnalyser();
+    an.fftSize = 1024;
+    src.connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    const tick = () => {
+      an.getByteTimeDomainData(buf);
+      let peak = 0;
+      for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+      $('level').style.width = Math.min(100, peak / 128 * 150) + '%';
+      S.raf = requestAnimationFrame(tick);
+    };
+    tick();
+
+    // Wake Lock
+    let wl = '不支持';
+    if ('wakeLock' in navigator) {
+      try {
+        S.wakeLock = await navigator.wakeLock.request('screen');
+        wl = '已获取';
+        S.wakeLock.addEventListener('release', () => { $('wl').textContent = 'WakeLock 已释放 / 可见性=' + document.visibilityState; });
+      } catch (e) { wl = '申请失败:' + e.name; }
+    }
+    dumps.capability.wakeLockState = wl;
+    $('wl').textContent = wl + ' / 可见性=' + document.visibilityState;
+
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+    S.rec = new MediaRecorder(S.stream, mime ? { mimeType: mime, audioBitsPerSecond: 32000 } : { audioBitsPerSecond: 32000 });
+    S.t0 = Date.now();
+    S.chunks = []; S.meta = []; S.gaps = []; S.memSamples = []; S.visEvents = [];
+
+    S.rec.ondataavailable = e => {
+      if (!e.data || e.data.size === 0) return;
+      const at = Date.now() - S.t0;
+      const prev = S.meta.length ? S.meta[S.meta.length - 1].at : 0;
+      const gap = at - prev;
+      S.gaps.push(gap);
+      S.meta.push({ at, size: e.data.size, vis: document.visibilityState });
+      S.chunks.push(e.data);
+      $('chunks').textContent = S.chunks.length;
+      $('maxgap').textContent = (Math.max(...S.gaps) / 1000).toFixed(1) + 's';
+    };
+
+    S.rec.start(5000);
+    setState('录音中');
+    S.timer = setInterval(() => {
+      $('clock').textContent = fmt(Date.now() - S.t0);
+      const m = memMB();
+      if (m != null) S.memSamples.push(m);
+      $('mem').textContent = (m ?? '—') + ' MB';
+      $('wl').textContent = (S.wakeLock && !S.wakeLock.released ? '持有中' : '已释放/未持有') + ' / 可见性=' + document.visibilityState;
+    }, 1000);
+
+    $('stop').disabled = false;
+    $('upload').disabled = true;
+  }
+
+  async function stop() {
+    $('stop').disabled = true;
+    setState('整理结果…');
+    clearInterval(S.timer);
+    cancelAnimationFrame(S.raf);
+    if (S.ctx) try { await S.ctx.close(); } catch (e) {}
+    if (S.wakeLock) try { await S.wakeLock.release(); } catch (e) {}
+    if (!S.rec) return;
+
+    const wallMs = Date.now() - S.t0;
+    await new Promise(r => { S.rec.addEventListener('stop', r, { once: true }); S.rec.stop(); });
+    S.stream.getTracks().forEach(t => t.stop());
+
+    S.lastBlob = new Blob(S.chunks, { type: S.chunks[0] ? S.chunks[0].type : 'audio/webm' });
+
+    const gaps = S.gaps.slice();
+    const maxGap = gaps.length ? Math.max(...gaps) : 0;
+    const bigGaps = gaps.filter(g => g > 6500);          // 分片 5s，超过 6.5s 视为异常空档
+    const peakMem = S.memSamples.length ? Math.max(...S.memSamples) : null;
+    const memGrowth = S.memSamples.length > 1 ? r2(S.memSamples[S.memSamples.length - 1] - S.memSamples[0]) : null;
+
+    dumps.summary = {
+      wallSec: r2(wallMs / 1000),
+      chunkCount: S.chunks.length,
+      rawKB: Math.round(S.lastBlob.size / 1024),
+      kbps: Math.round(S.lastBlob.size * 8 / (wallMs / 1000) / 1000),
+      est45minMB: Math.round(S.lastBlob.size / (wallMs / 1000) * 2700 / 1048576 * 10) / 10,
+      maxGapSec: r2(maxGap / 1000),
+      abnormalGapCount: bigGaps.length,
+      abnormalGapsSec: bigGaps.map(g => r2(g / 1000)),
+      peakMemMB: peakMem, memGrowthMB: memGrowth,
+      visibilityEvents: S.visEvents.length,
+    };
+    // 分片明细只保留前后各 12 条，避免 45 分钟时页面卡死
+    dumps.gaps = S.gaps.length <= 24 ? S.gaps.map(r2)
+      : [...S.gaps.slice(0, 12), '…共 ' + S.gaps.length + ' 个…', ...S.gaps.slice(-12)].map(v => typeof v === 'number' ? v : v);
+
+    // 判定
+    const v = $('verdict');
+    v.style.display = 'block';
+    let cls, msg;
+    if (bigGaps.length === 0) {
+      cls = 'ok'; msg = `未发现断流：${S.chunks.length} 个分片，最大空档 ${r2(maxGap / 1000)} 秒。`;
+    } else if (bigGaps.length <= 2) {
+      cls = 'warn'; msg = `出现 ${bigGaps.length} 处异常空档（最大 ${r2(maxGap / 1000)} 秒），可能锁屏时被节流。`;
+    } else {
+      cls = 'bad'; msg = `明显断流：${bigGaps.length} 处空档，最大 ${r2(maxGap / 1000)} 秒 —— 长时间录音不可靠。`;
+    }
+    if (peakMem != null && peakMem > 300) { cls = 'bad'; msg += ` 内存峰值 ${peakMem}MB，偏高。`; }
+    v.className = 'verdict ' + cls;
+    v.textContent = msg;
+
+    setState('完成');
+    $('upload').disabled = false;
+    render();
+  }
+
+  // 可选：上传 + 重封装验证（免费隧道大概率扛不住，失败不影响主结果）
+  async function upload() {
+    if (!S.lastBlob) return;
+    $('upload').disabled = true;
+    setState('上传中…');
+    S.rawName = `phone-${Date.now()}.webm`;
+    dumps.optionalUpload = {};
+    try {
+      const r = await fetch('/api/upload?name=' + encodeURIComponent(S.rawName), {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: S.lastBlob,
+      });
+      const txt = await r.text();
+      dumps.optionalUpload.upload = txt ? JSON.parse(txt) : { ok: false, error: '空响应（隧道不支持大 POST）' };
+    } catch (e) {
+      dumps.optionalUpload.upload = { ok: false, error: String(e) };
+    }
+    if (dumps.optionalUpload.upload && dumps.optionalUpload.upload.ok) {
+      setState('重封装中…');
+      try {
+        const r = await fetch('/api/remux?name=' + encodeURIComponent(S.rawName), { method: 'POST' });
+        dumps.optionalUpload.remux = await r.json();
+      } catch (e) { dumps.optionalUpload.remux = { ok: false, error: String(e) }; }
+      if (dumps.optionalUpload.remux && dumps.optionalUpload.remux.ok) {
+        const el = $('player');
+        el.src = dumps.optionalUpload.remux.path;
+        await new Promise(r => {
+          el.addEventListener('loadedmetadata', r, { once: true });
+          el.addEventListener('error', r, { once: true });
+          setTimeout(r, 6000);
+        });
+        dumps.optionalUpload.playerDuration = el.duration === Infinity ? 'Infinity' : el.duration;
+        setState('可播放，拖动测试见下');
+      }
+    } else {
+      setState('上传失败（不影响上面的结论）');
+    }
+    render();
+  }
+
+  $('start').addEventListener('click', start);
+  $('stop').addEventListener('click', stop);
+  $('upload').addEventListener('click', upload);
+
+  // GitHub Pages 是纯静态托管，没有 /api 后端：隐藏上传按钮，避免误导
+  if (/\.github\.io$/i.test(location.hostname)) {
+    $('upload').style.display = 'none';
+  }
+})();
+</script>
+</body>
+</html>
