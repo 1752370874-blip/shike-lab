@@ -60,6 +60,7 @@
   }
   .mk { position: absolute; transform: translateX(-50%); }
   .mk.photo { top: 2px; width: 13px; height: 13px; border: 1.5px solid var(--ink-2); border-radius: 2px; background: var(--card); }
+  .mk.photo.active { background: var(--ink); border-color: var(--ink); }
   .mk.note  { top: 33px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
   .mk.pt-wrong, .mk.pt-miss, .mk.pt-unclear {
     top: -6px; width: 0; height: 0; box-sizing: content-box;
@@ -70,6 +71,7 @@
   .mk.pt-unclear { border-top-color: var(--unclear); }
   .ticks { position: relative; height: 15px; font: 10.5px/1 ui-monospace, Consolas, monospace; color: var(--ink-3); }
   .ticks span { position: absolute; transform: translateX(-50%); }
+  .ticks span:first-child { transform: none; }
 
   .legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--ink-2); padding: 2px 0 12px 54px; flex-wrap: wrap; }
   .legend i { display: inline-block; vertical-align: -1px; margin-right: 4px; }
@@ -301,6 +303,7 @@
   segs.forEach((sg, i) => {
     const p = document.createElement('div');
     p.className = 'mk photo';
+    p.dataset.seg = String(i);
     p.style.left = ((sg.t0 + 20) / TOTAL * 100) + '%';
     el.track.appendChild(p);
     const n = document.createElement('div');
@@ -326,6 +329,10 @@
     el.head.style.left = pct + '%';
 
     const sg = segAt(t);
+    const segIdx = segs.indexOf(sg);
+    document.querySelectorAll('.mk.photo').forEach(m => {
+      m.classList.toggle('active', Number(m.dataset.seg) === segIdx);
+    });
     el.boardText.textContent = sg.board;
     el.boardStamp.textContent = sg.stamp;
     el.noteText.innerHTML = (sg.note || '（空）').split('\n').map(l =>
